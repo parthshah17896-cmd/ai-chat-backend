@@ -41,7 +41,13 @@ export default async function handler(req, res) {
     })
 
     const parsed = JSON.parse(body || "{}")
-    const message = parsed.message
+
+    const message =
+    parsed.message ||
+    parsed.input ||
+    parsed.text ||
+    parsed.query ||
+    ""
 
     if (!message) {
         return res.status(400).json({
