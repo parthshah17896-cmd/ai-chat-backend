@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Serverless API for Framer AI chat widget",
+  "description": "Serverless AI chat backend for Framer (OpenAI + Gemini)",
   "scripts": {
     "dev": "vercel dev",
     "deploy": "vercel --prod"
   },
   "dependencies": {
-    "openai": "^4.20.0"
+    "openai": "^4.20.0",
+    "@google/generative-ai": "^0.11.0"
   }
 }
