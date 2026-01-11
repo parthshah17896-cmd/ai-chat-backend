@@ -1,24 +1,12 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-
 export default async function handler(req, res) {
-    // 🔐 CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*")
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
     res.setHeader("Access-Control-Allow-Headers", "Content-Type")
 
-    // Preflight
-    if (req.method === "OPTIONS") {
-        return res.status(200).end()
-    }
-
-    // Only POST
-    if (req.method !== "POST") {
+    if (req.method === "OPTIONS") return res.status(200).end()
+    if (req.method !== "POST")
         return res.status(405).json({ reply: "Method not allowed" })
-    }
 
-    // ✅ Manual body parsing (this part is correct and stays)
     let body = ""
     await new Promise((resolve) => {
         req.on("data", (chunk) => (body += chunk))
@@ -26,39 +14,40 @@ export default async function handler(req, res) {
     })
 
     const parsed = JSON.parse(body || "{}")
-
     const message =
         parsed.message ||
         parsed.input ||
         parsed.text ||
-        parsed.query ||
         ""
 
     if (!message) {
-        return res.status(400).json({
-            reply: "Message is required",
-        })
+        return res.status(400).json({ reply: "Message required" })
     }
 
     try {
-        // ✅ THIS is the critical fix
-        const model = genAI.getGenerativeModel({
-            model: "gemini-pro",
-        })
+        const response = await fetch(
+            "https://api.groq.com/openai/v1/chat/completions",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+                },
+                body: JSON.stringify({
+                    model: "llama3-70b-8192",
+                    messages: [{ role: "user", content: message }],
+                }),
+            }
+        )
 
-        const result = await model.generateContent(message)
-        const response = await result.response
-        const text = response.text()
+        const data = await response.json()
 
         return res.status(200).json({
-            reply: text,
+            reply: data.choices[0].message.content,
         })
-    } catch (error) {
-        console.error("Gemini error:", error)
-
+    } catch (err) {
         return res.status(500).json({
-            reply:
-                "Gemini API error. Please try again after some time.",
+            reply: "Groq API error",
         })
     }
 }
