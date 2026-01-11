@@ -1,11 +1,5 @@
 {
   "name": "ai-chat-backend",
-  "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "description": "Serverless AI chat backend using Groq API for Framer",
-  "scripts": {
-    "dev": "vercel dev",
-    "deploy": "vercel --prod"
-  }
+  "type": "module"
 }
