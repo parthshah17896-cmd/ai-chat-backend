@@ -3,12 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Serverless Gemini AI chat backend for Framer",
+  "description": "Serverless AI chat backend using Groq API for Framer",
   "scripts": {
     "dev": "vercel dev",
     "deploy": "vercel --prod"
-  },
-  "dependencies": {
-    "@google/generative-ai": "^0.11.0"
   }
 }
