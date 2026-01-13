@@ -51,6 +51,11 @@ Core principles:
 - Give practical advice and examples
 - Avoid extreme or absolute statements
 
+IMPORTANT FORMATTING RULES:
+- If the user writes in bullet/point format, respond in bullet/point format too.
+- If your answer includes steps, always use numbered points.
+- Keep replies clean and skimmable, avoid long paragraphs.
+
 Tone mode: ${tone}
 ${
     tone === "male"
@@ -97,6 +102,7 @@ Rewrite mode rules:
     ]
 
     try {
+        // ✅ Streaming response
         const groqResponse = await fetch(
             "https://api.groq.com/openai/v1/chat/completions",
             {
@@ -108,23 +114,70 @@ Rewrite mode rules:
                 body: JSON.stringify({
                     model: "llama-3.1-8b-instant",
                     messages,
+                    stream: true, // ✅ IMPORTANT
                 }),
             }
         )
 
-        const data = await groqResponse.json()
-        const reply = data.choices[0].message.content
+        if (!groqResponse.ok) {
+            const errText = await groqResponse.text()
+            return res.status(500).json({
+                reply: "Groq API error",
+                debug: errText,
+            })
+        }
 
-        // Save memory (last 6 messages only)
+        res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+        })
+
+        const reader = groqResponse.body.getReader()
+        const decoder = new TextDecoder("utf-8")
+
+        let fullReply = ""
+
+        while (true) {
+            const { value, done } = await reader.read()
+            if (done) break
+
+            const chunk = decoder.decode(value, { stream: true })
+            const lines = chunk.split("\n")
+
+            for (const line of lines) {
+                if (!line.startsWith("data: ")) continue
+
+                const dataStr = line.replace("data: ", "").trim()
+                if (dataStr === "[DONE]") continue
+
+                try {
+                    const json = JSON.parse(dataStr)
+                    const token = json.choices?.[0]?.delta?.content || ""
+
+                    if (token) {
+                        fullReply += token
+                        // send token to frontend
+                        res.write(`data: ${JSON.stringify({ token })}\n\n`)
+                    }
+                } catch (e) {
+                    // ignore parsing noise
+                }
+            }
+        }
+
+        // ✅ Save memory (last 6 messages)
         const updatedHistory = [
             ...history,
             { role: "user", content: userPrompt },
-            { role: "assistant", content: reply },
+            { role: "assistant", content: fullReply },
         ].slice(-6)
 
         memoryStore.set(sessionId, updatedHistory)
 
-        return res.status(200).json({ reply })
+        // End stream
+        res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
+        res.end()
     } catch (err) {
         console.error(err)
         return res.status(500).json({
