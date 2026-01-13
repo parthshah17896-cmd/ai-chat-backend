@@ -1,4 +1,81 @@
 // Simple in-memory store (resets on cold start — OK for now)
+function containsUnsafeContent(text = "") {
+    const t = text.toLowerCase()
+
+    // 🔞 explicit sex / nudity / porn
+    const sexualExplicit = [
+        "nude",
+        "nudes",
+        "sex",
+        "blowjob",
+        "handjob",
+        "porn",
+        "onlyfans",
+        "fuck",
+        "suck",
+        "dick",
+        "pussy",
+        "boobs",
+        "cum",
+        "orgasm",
+        "horny",
+    ]
+
+    // 🚫 sexual violence / harassment
+    const sexualOffence = [
+        "rape",
+        "molest",
+        "sexual assault",
+        "force her",
+        "force him",
+        "coerce",
+        "blackmail",
+        "threaten",
+        "stalk",
+    ]
+
+    // 🤬 abusive / harassment (add more as needed)
+    const abusive = [
+        "bitch",
+        "slut",
+        "whore",
+        "madarchod",
+        "bhosdike",
+        "chutiya",
+        "gaand",
+    ]
+
+    // 🔐 privacy / doxxing
+    const privacy = [
+        "otp",
+        "password",
+        "bank account",
+        "credit card",
+        "address",
+        "phone number",
+        "aadhar",
+        "pan number",
+    ]
+
+    const matched =
+        sexualExplicit.some((w) => t.includes(w)) ||
+        sexualOffence.some((w) => t.includes(w)) ||
+        abusive.some((w) => t.includes(w)) ||
+        privacy.some((w) => t.includes(w))
+
+    return matched
+}
+
+function safeRefusalMessage() {
+    return `I can’t help with sexual content, harassment, abusive language, or anything that violates privacy.
+
+If you want, I *can* help you:
+- write a respectful message
+- handle rejection calmly
+- set boundaries
+- improve your conversation in a healthy way 🤍`
+}
+
 const memoryStore = new Map()
 
 export default async function handler(req, res) {
