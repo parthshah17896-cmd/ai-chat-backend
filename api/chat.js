@@ -1,27 +1,34 @@
-// Simple in-memory store (resets on cold start — OK for now)
+// ✅ In-memory store (resets on cold start — OK for now)
+const memoryStore = new Map()
+
+/* ---------------- SAFETY FILTERS ---------------- */
+
 function containsUnsafeContent(text = "") {
     const t = text.toLowerCase()
 
-    // 🔞 explicit sex / nudity / porn
     const sexualExplicit = [
         "nude",
         "nudes",
         "sex",
-        "blowjob",
-        "handjob",
         "porn",
         "onlyfans",
-        "fuck",
+        "blowjob",
+        "handjob",
+        "oral",
         "suck",
         "dick",
+        "penis",
         "pussy",
+        "vagina",
         "boobs",
+        "tits",
         "cum",
         "orgasm",
         "horny",
+        "escort",
+        "prostitute",
     ]
 
-    // 🚫 sexual violence / harassment
     const sexualOffence = [
         "rape",
         "molest",
@@ -32,9 +39,12 @@ function containsUnsafeContent(text = "") {
         "blackmail",
         "threaten",
         "stalk",
+        "revenge porn",
+        "leaked",
+        "leak her",
+        "leak his",
     ]
 
-    // 🤬 abusive / harassment (add more as needed)
     const abusive = [
         "bitch",
         "slut",
@@ -43,40 +53,47 @@ function containsUnsafeContent(text = "") {
         "bhosdike",
         "chutiya",
         "gaand",
+        "harami",
+        "randi",
     ]
 
-    // 🔐 privacy / doxxing
     const privacy = [
         "otp",
         "password",
+        "passcode",
         "bank account",
+        "account number",
         "credit card",
+        "cvv",
+        "pin",
         "address",
         "phone number",
+        "mobile number",
         "aadhar",
+        "aadhaar",
         "pan number",
+        "upi pin",
     ]
 
-    const matched =
+    return (
         sexualExplicit.some((w) => t.includes(w)) ||
         sexualOffence.some((w) => t.includes(w)) ||
         abusive.some((w) => t.includes(w)) ||
         privacy.some((w) => t.includes(w))
-
-    return matched
+    )
 }
 
 function safeRefusalMessage() {
-    return `I can’t help with sexual content, harassment, abusive language, or anything that violates privacy.
+    return `I can’t help with sexual content, nudity, harassment, abusive language, or anything that violates privacy.
 
-If you want, I *can* help you:
-- write a respectful message
-- handle rejection calmly
-- set boundaries
-- improve your conversation in a healthy way 🤍`
+But I *can* help you with:
+- writing a respectful message
+- handling rejection calmly
+- setting boundaries
+- improving your conversation in a healthy way 🤍`
 }
 
-const memoryStore = new Map()
+/* ---------------- API HANDLER ---------------- */
 
 export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Origin", "*")
@@ -103,7 +120,7 @@ export default async function handler(req, res) {
         message,
         mode = "chat",
         tone = "neutral",
-        indianContext = false,
+        indianContext = true,
         sessionId = "default",
     } = parsed
 
@@ -111,53 +128,46 @@ export default async function handler(req, res) {
         return res.status(400).json({ reply: "Message is required" })
     }
 
+    // ✅ Hard safety block
+    if (containsUnsafeContent(message)) {
+        return res.status(200).json({ reply: safeRefusalMessage() })
+    }
+
     // 🔄 Conversation memory
     const history = memoryStore.get(sessionId) || []
 
-    // 🧠 SYSTEM PROMPT
     const systemPrompt = `
 You are a friendly, empathetic relationship coach.
-
-Your job is to help with dating, relationships, and emotional clarity.
 
 Core principles:
 - Be warm, calm, and non-judgmental
 - Encourage confidence without manipulation
 - Promote consent, respect, and emotional safety
-- Normalize nervousness and dating anxiety
 - Give practical advice and examples
-- Avoid extreme or absolute statements
+
+TEXT-ONLY RESTRICTION:
+- You are a text-based assistant ONLY.
+- Do NOT generate sexual/nude content.
+- Do NOT generate harassment or abusive content.
+- Do NOT request or reveal private data (OTP, phone numbers, address, passwords).
+- If user asks for disallowed content, refuse briefly and redirect to safe help.
 
 IMPORTANT FORMATTING:
-- If user writes in points, respond in points.
-- If giving steps, use numbered points.
+- If the user writes in points/bullets, respond in points/bullets.
+- If your reply includes steps, use numbered points.
 - Avoid long paragraphs.
 
 Tone mode: ${tone}
-${
-    tone === "male"
-        ? "Respond in a grounded, confident, masculine tone."
-        : tone === "female"
-        ? "Respond in a warm, emotionally expressive, feminine tone."
-        : "Respond in a neutral, balanced tone."
-}
 
 ${
     indianContext
         ? `
-Cultural context:
-- Dating norms in India
-- Sensitivity to family, social circles, and privacy
-- Avoid overly aggressive or westernized advice
+India context:
+- Keep advice culturally sensitive and respectful
+- Avoid aggressive/westernized extremes
 `
         : ""
 }
-
-Rewrite mode rules:
-- Improve confidence and clarity
-- Keep message natural and respectful
-- Do not sound cheesy or scripted
-- Preserve original intent
 `
 
     const userPrompt =
@@ -190,10 +200,12 @@ Rewrite mode rules:
 
         if (!groqResponse.ok) {
             const errText = await groqResponse.text()
-            return res.status(500).json({ reply: "Groq API error", errText })
+            return res.status(500).json({
+                reply: "Groq API error",
+                debug: errText,
+            })
         }
 
-        // ✅ Streaming headers
         res.writeHead(200, {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache, no-transform",
@@ -227,17 +239,17 @@ Rewrite mode rules:
                         res.write(`data: ${JSON.stringify({ token })}\n\n`)
                     }
                 } catch {
-                    // ignore parsing noise
+                    // ignore
                 }
             }
         }
 
-        // Save memory (last 6 messages only)
+        // ✅ Save memory (last 50 messages)
         const updatedHistory = [
             ...history,
             { role: "user", content: userPrompt },
             { role: "assistant", content: fullReply },
-        ].slice(-6)
+        ].slice(-50)
 
         memoryStore.set(sessionId, updatedHistory)
 
