@@ -24,8 +24,8 @@ export default async function handler(req, res) {
 
     const {
         message,
-        mode = "chat", // chat | rewrite
-        tone = "neutral", // male | female | neutral
+        mode = "chat",
+        tone = "neutral",
         indianContext = false,
         sessionId = "default",
     } = parsed
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     // 🔄 Conversation memory
     const history = memoryStore.get(sessionId) || []
 
-    // 🧠 SYSTEM PROMPT (DYNAMIC)
+    // 🧠 SYSTEM PROMPT
     const systemPrompt = `
 You are a friendly, empathetic relationship coach.
 
@@ -51,10 +51,10 @@ Core principles:
 - Give practical advice and examples
 - Avoid extreme or absolute statements
 
-IMPORTANT FORMATTING RULES:
-- If the user writes in bullet/point format, respond in bullet/point format too.
-- If your answer includes steps, always use numbered points.
-- Keep replies clean and skimmable, avoid long paragraphs.
+IMPORTANT FORMATTING:
+- If user writes in points, respond in points.
+- If giving steps, use numbered points.
+- Avoid long paragraphs.
 
 Tone mode: ${tone}
 ${
@@ -76,12 +76,6 @@ Cultural context:
         : ""
 }
 
-If the user seems anxious:
-- Slow the response
-- Reassure them
-- Break advice into small steps
-- Normalize fear of rejection
-
 Rewrite mode rules:
 - Improve confidence and clarity
 - Keep message natural and respectful
@@ -89,7 +83,6 @@ Rewrite mode rules:
 - Preserve original intent
 `
 
-    // 📝 USER PROMPT (MODE AWARE)
     const userPrompt =
         mode === "rewrite"
             ? `Rewrite the following message to sound confident, natural, and respectful:\n\n"${message}"`
@@ -102,7 +95,6 @@ Rewrite mode rules:
     ]
 
     try {
-        // ✅ Streaming response
         const groqResponse = await fetch(
             "https://api.groq.com/openai/v1/chat/completions",
             {
@@ -114,19 +106,17 @@ Rewrite mode rules:
                 body: JSON.stringify({
                     model: "llama-3.1-8b-instant",
                     messages,
-                    stream: true, // ✅ IMPORTANT
+                    stream: true,
                 }),
             }
         )
 
         if (!groqResponse.ok) {
             const errText = await groqResponse.text()
-            return res.status(500).json({
-                reply: "Groq API error",
-                debug: errText,
-            })
+            return res.status(500).json({ reply: "Groq API error", errText })
         }
 
+        // ✅ Streaming headers
         res.writeHead(200, {
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache, no-transform",
@@ -149,7 +139,7 @@ Rewrite mode rules:
                 if (!line.startsWith("data: ")) continue
 
                 const dataStr = line.replace("data: ", "").trim()
-                if (dataStr === "[DONE]") continue
+                if (!dataStr || dataStr === "[DONE]") continue
 
                 try {
                     const json = JSON.parse(dataStr)
@@ -157,16 +147,15 @@ Rewrite mode rules:
 
                     if (token) {
                         fullReply += token
-                        // send token to frontend
                         res.write(`data: ${JSON.stringify({ token })}\n\n`)
                     }
-                } catch (e) {
+                } catch {
                     // ignore parsing noise
                 }
             }
         }
 
-        // ✅ Save memory (last 6 messages)
+        // Save memory (last 6 messages only)
         const updatedHistory = [
             ...history,
             { role: "user", content: userPrompt },
@@ -175,7 +164,6 @@ Rewrite mode rules:
 
         memoryStore.set(sessionId, updatedHistory)
 
-        // End stream
         res.write(`data: ${JSON.stringify({ done: true })}\n\n`)
         res.end()
     } catch (err) {
